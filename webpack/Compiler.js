@@ -1,7 +1,7 @@
 const { Tapable, SyncHook, SyncBailHook, AsyncParallelHook, AsyncSeriesHook } = require("tapable");
 const Compilation = require('./Compilation');
 const NormalModuleFactory = require('./NormalModuleFactory');
-// const Stats = require('./Stats');
+const Stats = require('./Stats');
 
 class Compiler extends Tapable {
     constructor(context) {
@@ -31,7 +31,7 @@ class Compiler extends Tapable {
 
         };
     }
-    run(finalCallback) {
+    run(callback) {
         console.log("Compiler run");
         // callback(null, {
         //     toJson() {
@@ -44,10 +44,14 @@ class Compiler extends Tapable {
         //     }
         // });
 
+        const finalCallback = (err, stats) => {
+            callback(err, stats)
+        }
+
         //编译完成后的回调
         const onCompiled = (err, compilation) => {
             console.log('onCompiled');
-            finalCallback(err, new  (compilation));
+            finalCallback(err, new Stats(compilation));
         };
         //准备运行编译
         this.hooks.beforeRun.callAsync(this, err => {
@@ -66,7 +70,7 @@ class Compiler extends Tapable {
             const compilation = this.newCompilation(params);
             this.hooks.make.callAsync(compilation, err => {
                 console.log('make完成');
-                 (err, compilation);
+                onCompiled(err, compilation);
             });
         });
     }

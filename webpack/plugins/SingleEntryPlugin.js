@@ -13,7 +13,7 @@ class EntryOptionPlugin {
                 // 从此入口开始编译,编译入口文件和依赖
                 console.log('SingleEntryPlugin 触发');
                 // 开始编译一个新的入口
-                // compilation.addEntry(context, entry, name, callback);
+                compilation.addEntry(context, entry, name, callback);
             }
         );
     }
