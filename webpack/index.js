@@ -1,5 +1,6 @@
 const NodeEnvironmentPlugin = require("./plugins/NodeEnvironmentPlugin");
 const Compiler = require("./Compiler");
+const WebpackOptionsApply = require("./WebpackOptionsApply");
 function webpack(options) {
     //创建compiler
     let compiler = new Compiler(options.context);
@@ -16,6 +17,7 @@ function webpack(options) {
             plugin.apply(compiler);
         }
     }
+    new WebpackOptionsApply().process(options, compiler); //处理参数
     return compiler;
 }
 
