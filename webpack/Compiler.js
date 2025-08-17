@@ -23,7 +23,7 @@ class Compiler extends Tapable {
 
             compilation: new SyncHook(["compilation", "params"]), // 创建完成一个新的compilation
 
-            make: new AsyncParallelHook(["compilation"]),  // make 构建
+            make: new AsyncParallelHook(["compilation"]),  // make 构建 异步并行,当有多个入口同时编译
 
             afterCompile: new AsyncSeriesHook(['compilation']),  // 编译完成
 
@@ -62,6 +62,7 @@ class Compiler extends Tapable {
         const params = this.newCompilationParams();
         this.hooks.beforeCompile.callAsync(params, err => {
             this.hooks.compile.call(params);
+            // 创建新的 Compilation 对象
             const compilation = this.newCompilation(params);
             this.hooks.make.callAsync(compilation, err => {
                 console.log('make完成');

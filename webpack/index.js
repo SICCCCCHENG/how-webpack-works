@@ -17,6 +17,7 @@ function webpack(options) {
             plugin.apply(compiler);
         }
     }
+    // 初始化选项,挂载内置插件
     new WebpackOptionsApply().process(options, compiler); //处理参数
     return compiler;
 }
