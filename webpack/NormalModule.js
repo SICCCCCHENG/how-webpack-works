@@ -13,6 +13,7 @@ class NormalModule {
         // /Users/sicheng/Desktop/Demo/learn/webpack-learn/src/index.js
         this.resource = resource;  // 模块的绝对路径
         this.moduleId = moduleId;
+        // this.moduleId = moduleId || ('./' + path.posix.relative(context, resource));
         this.parser = parser;  // ast 解析器,把源代码解析成ast
         this._source = null;  // 模块对应的源代码
         this._ast = null;  // 对应的ast
@@ -42,27 +43,35 @@ class NormalModule {
                         let dependencyResource = path.posix.join(path.posix.dirname(this.resource), moduleName + extension);
                         //获取依赖模块的模块ID 
                         // ./+从根目录出发到依赖模块的绝对路径的相对路径
+                        // ./src/title.js 
                         let dependencyModuleId = '.' + path.posix.sep + path.posix.relative(this.context, dependencyResource);
 
                         console.log(dependencyModuleId, 'dependencyModuleId');
+
+                        // 把require 模块路径 './title.js' 变成了 './src/title.js'
+                        node.arguments = [types.stringLiteral(dependencyModuleId)];
                         // //添加依赖
-                        // this.dependencies.push({
-                        //     name: this.name, context: this.context, rawRequest: moduleName,
-                        //     moduleId: dependencyModuleId, resource: dependencyResource
-                        // });
-                        // node.arguments = [types.stringLiteral(dependencyModuleId)];
+                        this.dependencies.push({
+                            name: this.name,  // main
+                            context: this.context, // 根目录
+                            rawRequest: moduleName,  // 模块的相对路径  原始路径
+                            moduleId: dependencyModuleId, // 模块id 相对于根目录的相对路径
+                            resource: dependencyResource  // 依赖模块的绝对路径
+                        });
+                        
                     }
                 }
             });
-            // let { code } = generate(ast);
-            // this._source = code;
-            // this._ast = ast;
-            // callback();
+            let { code } = generate(ast);
+            this._source = code;
+            this._ast = ast;
+            callback();
         });
     }
     //获取模块代码
     doBuild(compilation, callback) {
         let originalSource = this.getSource(this.resource, compilation);
+        // loader逻辑放到这
         this._source = originalSource;
         callback();
     }
