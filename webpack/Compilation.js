@@ -5,8 +5,7 @@ const Parser = require('./Parser');
 const parser = new Parser();
 const path = require('path');
 const async = require('neo-async');
-
-// let Chunk = require('./Chunk');
+const Chunk = require('./Chunk');
 
 class Compilation extends Tapable {
     constructor(compiler) {
@@ -18,28 +17,16 @@ class Compilation extends Tapable {
         this.outputFileSystem = compiler.outputFileSystem; // fs
         this.entries = [];  // 入口的数组
         this.modules = []; // 所有模块的数组
+        this.chunks = []; // 这里放所有的代码块
         this._modules = {}; // key是模块id, 值是模块对象
         this.hooks = {
             // 当你成功构建完成一个模块之后就会触发此钩子
             succeedModule: new SyncHook(["module"]),
-            // seal: new SyncHook([]),
-            beforeChunks: new SyncHook([]),
-            afterChunks: new SyncHook(["chunks"])
+            seal: new SyncHook( ),
+            beforeChunks: new SyncHook(),  // 生成代码块之前 
+            afterChunks: new SyncHook() // 生成代码块之后
         }
     }
-
-    // seal(callback) {
-    //     this.hooks.seal.call();
-    //     this.hooks.beforeChunks.call();//生成代码块之前
-    //     for (const module of this.entries) {//循环入口模块
-    //         const chunk = new Chunk(module);//创建代码块
-    //         this.chunks.push(chunk);//把代码块添加到代码块数组中
-    //         //把代码块的模块添加到代码块中 
-    //         chunk.modules = this.modules.filter(module => module.name == chunk.name);
-    //     }
-    //     this.hooks.afterChunks.call(this.chunks);//生成代码块之后
-    //     callback();//封装结束
-    // }
 
     //context ./src/index.js main callback(终级回调)
     /**
@@ -161,6 +148,21 @@ class Compilation extends Tapable {
             this.hooks.succeedModule.call(module);
             return afterBuild(err, module);
         });
+    }
+
+    // 把模块封装成代码块
+    seal(callback) {
+        this.hooks.seal.call();
+        this.hooks.beforeChunks.call();//生成代码块之前
+        // 一般来说,默认情况下,每一个入口会生成一个代码块
+        for (const entryModule of this.entries) {//循环入口模块
+            const chunk = new Chunk(entryModule);//创建代码块  根据入口模块得到一个代码块
+            this.chunks.push(chunk);//把代码块添加到代码块数组中
+            //把代码块的模块添加到代码块中 
+            chunk.modules = this.modules.filter(module => module.name == chunk.name);
+        }
+        this.hooks.afterChunks.call(this.chunks);//生成代码块之后
+        callback();//封装结束
     }
 }
 module.exports = Compilation;
