@@ -41,15 +41,34 @@ class NormalModule {
                         node.callee.name = '__webpack_require__';
                         //获取要加载的模块ID
                         let moduleName = node.arguments[0].value;
-                        //获取扩展名
-                        let extension = moduleName.split(path.posix.sep).pop().indexOf('.') == -1 ? '.js' : '';
-                        //获取依赖模块的绝对路径   posix 是将 window 里面 \ 转化为 / 
-                        // /Users/sicheng/Desktop/Demo/learn/webpack-learn/src/title.js
-                        let dependencyResource = path.posix.join(path.posix.dirname(this.resource), moduleName + extension);
-                        //获取依赖模块的模块ID 
-                        // ./+从根目录出发到依赖模块的绝对路径的相对路径
-                        // ./src/title.js 
-                        let dependencyModuleId = '.' + path.posix.sep + path.posix.relative(this.context, dependencyResource);
+                        // 依赖的绝对路径
+                        let dependencyResource;
+
+                        let dependencyModuleId
+                        // 用户自定义模块
+                        if (moduleName.startsWith('.')) {
+                            //获取扩展名
+                            let extension = moduleName.split(path.posix.sep).pop().indexOf('.') == -1 ? '.js' : '';
+                            //获取依赖模块的绝对路径   posix 是将 window 里面 \ 转化为 / 
+                            // /Users/sicheng/Desktop/Demo/learn/webpack-learn/src/title.js
+                            dependencyResource = path.posix.join(path.posix.dirname(this.resource), moduleName + extension);
+
+                            //获取依赖模块的模块ID 
+                            // ./+从根目录出发到依赖模块的绝对路径的相对路径
+                            // ./src/title.js 
+                            dependencyModuleId = '.' + path.posix.sep + path.posix.relative(this.context, dependencyResource);
+                        } else { // 三方模块
+                            // /Users/sicheng/Desktop/Demo/learn/webpack-learn/node_modules/isarray/index.js
+                            dependencyResource = require.resolve(path.posix.join(this.context, 'node_modules', moduleName));
+                            // dependencyResource = dependencyResource.replace(/\\/g, path.posix.sep);
+                            dependencyResource = dependencyResource.replace(/\\/g, '/');  // 把 windows 里的 \ 转为 /
+
+                            // dependencyResource ->  /Users/sicheng/Desktop/Demo/learn/webpack-learn/node_modules/isarray/index.js
+                            // this.context -> /Users/sicheng/Desktop/Demo/learn/webpack-learn
+                            // ./node_modules/isarray/index.js
+                            //获取依赖模块的模块ID
+                            dependencyModuleId = '.' + dependencyResource.slice(this.context.length);
+                        }
 
                         console.log(dependencyModuleId, 'dependencyModuleId');
 
