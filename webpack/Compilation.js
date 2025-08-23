@@ -9,8 +9,14 @@ const Chunk = require('./Chunk');
 
 const ejs = require('ejs');
 const fs = require('fs');
-const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'main.ejs'), 'utf8');
+// const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'main.ejs'), 'utf8');
+// const mainRender = ejs.compile(mainTemplate);
+
+const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'mainTemplate.ejs'), 'utf8');
 const mainRender = ejs.compile(mainTemplate);
+const chunkTemplate = fs.readFileSync(path.join(__dirname, 'template', 'chunkTemplate.ejs'), 'utf8');
+const chunkRender = ejs.compile(chunkTemplate);
+
 
 class Compilation extends Tapable {
     constructor(compiler) {
@@ -43,12 +49,13 @@ class Compilation extends Tapable {
      * @param {*} name  入口名字 main
      * @param {*} callback  finalCallback
      */
-    addEntry(context, entry, name, callback) {
-        this._addModuleChain(context, entry, name, (err, module) => {
+
+    addEntry(context, entry, name, async, callback) {
+        this._addModuleChain(context, entry, name, async, (err, module) => {
             callback(err, module);
         });
     }
-    _addModuleChain(context, entry, name, callback) {
+    _addModuleChain(context, entry, name, async, callback) {
 
         this.createModule({
             name,
@@ -56,6 +63,7 @@ class Compilation extends Tapable {
             rawRequest: entry,
             resource: path.posix.join(context, entry),
             parser,
+            async
             // createModule 函数里面的可以放到这里
             // moduleId: './' + path.posix.relative(context, resource);  // ./src/index.js
         }, entryModule => this.entries.push(entryModule), callback)
@@ -108,7 +116,7 @@ class Compilation extends Tapable {
         let dependencies = module.dependencies;
         // 遍历依赖模块, 全部开始编译, 当所有模块编译完成后开始调用callback
         async.forEach(dependencies, (dependency, done) => {
-            let { name, context, rawRequest, resource, moduleId } = dependency;
+            let { name, context, rawRequest, resource, moduleId, async } = dependency;
             // 编译成功后会走done, 都结束之后会走callback
             this.createModule({
                 name,
@@ -116,7 +124,8 @@ class Compilation extends Tapable {
                 rawRequest,
                 resource,
                 parser,
-                moduleId
+                moduleId,
+                async
             }, null, done)
 
 
@@ -162,10 +171,18 @@ class Compilation extends Tapable {
             const chunk = this.chunks[i];
             chunk.files = [];
             const file = chunk.name + '.js';
-            const source = mainRender({ 
-                entryId: chunk.entryModule.moduleId,   // ./src/index.js
-                modules: chunk.modules  // [{moduleId: './src/index.js'}, {moduleId: './src/title.js'}]
-            });
+            let source;
+            if (chunk.async) {
+                source = chunkRender({ 
+                    chunkName: chunk.name, 
+                    modules: chunk.modules 
+                });
+            } else {
+                source = mainRender({
+                    entryId: chunk.entryModule.moduleId,   // ./src/index.js
+                    modules: chunk.modules  // [{moduleId: './src/index.js'}, {moduleId: './src/title.js'}]
+                });
+            }
             chunk.files.push(file);
             this.emitAsset(file, source);
         }

@@ -129,31 +129,13 @@
     return __webpack_require__(__webpack_require__.s = "./src/index.js");
   })
     ({
-      
-                "./src/index.js":
+      <%
+            for(let id in modules){
+                let {moduleId,_source} = modules[id];%>
+                "<%-moduleId%>":
                 (function (module, exports,__webpack_require__) {
-                  // let title = require('./title');
-// console.log(title);
-
-// 放到dependenciess数组中
-const async = __webpack_require__("./src/sync.js");
-console.log(async);
-
-// 如果 import 调用了一个模块, 那么这个模块和他依赖的模块会成一个单独的异步代码块, 里面所有的async都为true
-// 放到blocks数组中
-//  如果遇到了import, import 模块会成为一个单独的入口, 会生成一个单独的代码块(文件) 
-__webpack_require__.e("title").then(__webpack_require__.t.bind(null, "./src/title.js", 7)).then(result => {
-  console.log(result.default);
-});
-
-__webpack_require__.e("sum").then(__webpack_require__.t.bind(null, "./src/sum.js", 7)).then(result => {
-  console.log(result.default);
-});
+                  <%-_source%>
                 }),
-             
-                "./src/sync.js":
-                (function (module, exports,__webpack_require__) {
-                  module.exports = 'sync';
-                }),
-             
+             <%}
+          %>
     });

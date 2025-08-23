@@ -2,9 +2,9 @@ const path = require('path');
 const types = require('babel-types');
 const generate = require('babel-generator').default;
 const traverse = require('babel-traverse').default;
-
+const async = require('neo-async');
 class NormalModule {
-    constructor({ name, context, rawRequest, resource, parser, moduleId }) {
+    constructor({ name, context, rawRequest, resource, parser, moduleId, async }) {
         this.name = name;
         // /Users/sicheng/Desktop/Demo/learn/webpack-learn
         this.context = context;
@@ -18,9 +18,14 @@ class NormalModule {
         this._source = null;  // 模块对应的源代码
         this._ast = null;  // 对应的ast
         this.dependencies = [];
+        //  当前模块依赖哪些异步模块 import()
+        this.blocks = [];
+        // 表示当前代码块是同步还是异步
+        this.async = async;
     }
     //解析依赖
     build(compilation, callback) {
+        console.log('build @@@');
         this.doBuild(compilation, err => {
             let originalSource = this.getSource(this.resource, compilation);
             // 将 当前模块 的内容转换成 AST
@@ -58,14 +63,55 @@ class NormalModule {
                             moduleId: dependencyModuleId, // 模块id 相对于根目录的相对路径
                             resource: dependencyResource  // 依赖模块的绝对路径
                         });
-                        
+
+                    } else if (types.isImport(nodePath.node.callee)) {
+                        // 1. 获取要加载的模块ID ./title.js
+                        let moduleName = node.arguments[0].value;
+                        // 2. 获取扩展名
+                        let extension = moduleName.split(path.posix.sep).pop().indexOf('.') == -1 ? '.js' : '';
+                        // 3. 获取依赖模块的绝对路径
+                        let dependencyResource = path.posix.join(path.posix.dirname(this.resource), moduleName + extension);
+                        // 4. 获取依赖模块的模块ID
+                        let dependencyModuleId = '.' + path.posix.sep + path.posix.relative(this.context, dependencyResource);
+
+                        // 以上四点和 碰到 require 导入一致
+
+                        // 5. 获取代码块的ID
+                        // let dependencyChunkId = dependencyModuleId.slice(2, dependencyModuleId.lastIndexOf('.')).replace(path.posix.sep, '_', 'g');
+
+                        let chunkName = '0' // 其实异步模块会递增
+
+                        if (Array.isArray(node.arguments[0].leadingComments) && node.arguments[0].leadingComments.length > 0) {
+                            // webpackChunkName: 'title'
+                            let leadingComments = node.arguments[0].leadingComments[0].value
+                            let regexp = /webpackChunkName:\s*['"]([^'"]+)['"]/;
+                            chunkName = leadingComments.match(regexp)[1]
+                        }
+
+                        // chunkId 不需要带 .js 后缀
+                        nodePath.replaceWithSourceString(`
+                                __webpack_require__.e("${chunkName}").then(__webpack_require__.t.bind(null,"${dependencyModuleId}",7))
+                            `);
+                        this.blocks.push({
+                            context: this.context,
+                            entry: dependencyModuleId,
+                            name: chunkName,
+                            async: true
+                        });
+
                     }
                 }
             });
             let { code } = generate(ast);
             this._source = code;
             this._ast = ast;
-            callback();
+
+            // 先处理异步依赖,再处理 同步依赖
+            // 循环构建每一个异步代码块, 都构建完成才代表这个模块构建完成
+            async.forEach(this.blocks, ({ context, entry, name, async }, done) => {
+                compilation._addModuleChain(context, entry, name, async, done);
+            }, callback);
+            // callback();
         });
     }
     //获取模块代码
