@@ -2,6 +2,8 @@ const { Tapable, SyncHook, SyncBailHook, AsyncParallelHook, AsyncSeriesHook } = 
 const Compilation = require('./Compilation');
 const NormalModuleFactory = require('./NormalModuleFactory');
 const Stats = require('./Stats');
+const mkdirp = require('mkdirp');  // 递归创建新的文件夹
+const path = require('path');
 
 class Compiler extends Tapable {
     constructor(context) {
@@ -27,31 +29,53 @@ class Compiler extends Tapable {
 
             afterCompile: new AsyncSeriesHook(['compilation']),  // 编译完成
 
-            done: new AsyncSeriesHook(['stats']),
+            emit: new AsyncSeriesHook(["compilation"]), // 把生成chunk写入文件
+
+            done: new AsyncSeriesHook(['stats']), // 所有编译全部完成
 
         };
     }
+
+    emitAssets(compilation, callback) {
+        const emitFiles = err => {
+            let assets = compilation.assets;
+            for (let file in assets) {
+                let source = assets[file];
+                // /Users/sicheng/Desktop/Demo/learn/webpack-learn/dist/main.js
+                const targetPath = path.posix.join(this.options.output.path, file);
+                let content = source;
+                this.outputFileSystem.writeFileSync(targetPath, content);
+            }
+            callback();
+        }
+        // 先触发emit回调, emit是修改输出文件的最后机会, 用的很多
+        this.hooks.emit.callAsync(compilation, err => {
+            // 先创建dist输出目录,再写入文件
+            // mkdirp(this.options.output.path, emitFiles);
+            // 异步版本
+            console.log(this.options.output.path, '@@@');
+            this.outputFileSystem.mkdir(this.options.output.path, { recursive: true }, (err) => {
+                if (err) return callback(err);
+                emitFiles();
+            });
+        });
+    }
+
     run(callback) {
         console.log("Compiler run");
-        // callback(null, {
-        //     toJson() {
-        //         return {
-        //             entries: [], // 显示所有入口
-        //             chunks: [], // 代码块
-        //             modules: [], // 模块
-        //             assets: [] // 打包后的资源
-        //         }
-        //     }
-        // });
-
-        const finalCallback = (err, stats) => {
-            callback(err, stats)
-        }
 
         //编译完成后的回调
         const onCompiled = (err, compilation) => {
             console.log('onCompiled');
-            finalCallback(err, new Stats(compilation));
+            // finalCallback(err, new Stats(compilation));
+            // 把chunk写入文件
+            this.emitAssets(compilation, err => {
+                // 先收集编译信息  chunks entries modules files
+                const stats = new Stats(compilation);
+                this.hooks.done.callAsync(stats, err => {
+                    return callback(err, stats);
+                });
+            })
         };
         //准备运行编译
         this.hooks.beforeRun.callAsync(this, err => {

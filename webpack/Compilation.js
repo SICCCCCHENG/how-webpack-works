@@ -7,6 +7,11 @@ const path = require('path');
 const async = require('neo-async');
 const Chunk = require('./Chunk');
 
+const ejs = require('ejs');
+const fs = require('fs');
+const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'main.ejs'), 'utf8');
+const mainRender = ejs.compile(mainTemplate);
+
 class Compilation extends Tapable {
     constructor(compiler) {
         super();
@@ -19,10 +24,12 @@ class Compilation extends Tapable {
         this.modules = []; // 所有模块的数组
         this.chunks = []; // 这里放所有的代码块
         this._modules = {}; // key是模块id, 值是模块对象
+        this.files = [];  //生成的文件 本次编译所有产出的文件名
+        this.assets = {}; //资源  key 是文件名,value是文件内容
         this.hooks = {
             // 当你成功构建完成一个模块之后就会触发此钩子
             succeedModule: new SyncHook(["module"]),
-            seal: new SyncHook( ),
+            seal: new SyncHook(),
             beforeChunks: new SyncHook(),  // 生成代码块之前 
             afterChunks: new SyncHook() // 生成代码块之后
         }
@@ -150,6 +157,24 @@ class Compilation extends Tapable {
         });
     }
 
+    createChunkAssets() {
+        for (let i = 0; i < this.chunks.length; i++) {
+            const chunk = this.chunks[i];
+            chunk.files = [];
+            const file = chunk.name + '.js';
+            const source = mainRender({ 
+                entryId: chunk.entryModule.moduleId,   // ./src/index.js
+                modules: chunk.modules  // [{moduleId: './src/index.js'}, {moduleId: './src/title.js'}]
+            });
+            chunk.files.push(file);
+            this.emitAsset(file, source);
+        }
+    }
+    emitAsset(file, source) {
+        this.assets[file] = source;
+        this.files.push(file);
+    }
+
     // 把模块封装成代码块
     seal(callback) {
         this.hooks.seal.call();
@@ -161,7 +186,9 @@ class Compilation extends Tapable {
             //把代码块的模块添加到代码块中 
             chunk.modules = this.modules.filter(module => module.name == chunk.name);
         }
-        this.hooks.afterChunks.call(this.chunks);//生成代码块之后
+        this.hooks.afterChunks.call(this.chunks);
+        //生成代码块之后 要生成代码块对应的资源
+        this.createChunkAssets();
         callback();//封装结束
     }
 }
