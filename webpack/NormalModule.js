@@ -165,3 +165,10 @@ module.exports = NormalModule;
  * ./node_modules/util/util.js
  * 路径分隔符是linux下的 / , 而不是window的 \
  */
+
+
+/**
+ * 如何处理懒加载
+ * 1 先把代码转为ast语法树
+ * 2 找出动态import节点
+ */

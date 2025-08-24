@@ -12,7 +12,8 @@ const fs = require('fs');
 // const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'main.ejs'), 'utf8');
 // const mainRender = ejs.compile(mainTemplate);
 
-const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'mainTemplate.ejs'), 'utf8');
+// const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'mainTemplate.ejs'), 'utf8');
+const mainTemplate = fs.readFileSync(path.join(__dirname, 'template', 'splitChunks_template', 'mainDeferTemplate.ejs'), 'utf8');
 const mainRender = ejs.compile(mainTemplate);
 const chunkTemplate = fs.readFileSync(path.join(__dirname, 'template', 'chunkTemplate.ejs'), 'utf8');
 const chunkRender = ejs.compile(chunkTemplate);
@@ -29,9 +30,14 @@ class Compilation extends Tapable {
         this.entries = [];  // 入口的数组
         this.modules = []; // 所有模块的数组
         this.chunks = []; // 这里放所有的代码块
-        this._modules = {}; // key是模块id, 值是模块对象
+        this._modules = {}; // key是模块id, 值是模块对象   防止重复
         this.files = [];  //生成的文件 本次编译所有产出的文件名
         this.assets = {}; //资源  key 是文件名,value是文件内容
+
+        this.vendors = [];//第三方模块
+        this.commons = [];//同时被多个代码块加载的模块, 不在node_modules,调用次数大于1的模块 
+        this.commonsCountMap = {};// 记录每个模块被代码块引用的次数, 例如如果大于2, 则 被分离出去
+
         this.hooks = {
             // 当你成功构建完成一个模块之后就会触发此钩子
             succeedModule: new SyncHook(["module"]),
@@ -88,8 +94,13 @@ class Compilation extends Tapable {
         let module = moduleFactory.create(data)
         addEntry && addEntry(module) // 如果是入口, 则添加到入口模块中
         module.moduleId = './' + path.posix.relative(this.context, module.resource);  // ./src/index.js
-        this._modules[module.moduleId] = module  // 保存对应信息
-        this.modules.push(module);  // 普通模块数组
+        
+        // 防止重复编译
+        // if (!this._modules[module.moduleId]) {
+            this._modules[module.moduleId] = module  // 保存对应信息
+            this.modules.push(module);  // 普通模块数组
+        // }
+
         // this.entries.push(module);//把编译好的模块添加到入口列表里面  入口模块数组
         const afterBuild = (err, module) => {
 
@@ -173,15 +184,25 @@ class Compilation extends Tapable {
             const file = chunk.name + '.js';
             let source;
             if (chunk.async) {
-                source = chunkRender({ 
-                    chunkName: chunk.name, 
-                    modules: chunk.modules 
+                source = chunkRender({
+                    chunkName: chunk.name,
+                    modules: chunk.modules
                 });
             } else {
+                // source = mainRender({
+                //     entryId: chunk.entryModule.moduleId,   // ./src/index.js
+                //     modules: chunk.modules  // [{moduleId: './src/index.js'}, {moduleId: './src/title.js'}]
+                // });
+
+                let deferredChunks = [];
+                if (this.commons.length) deferredChunks.push('commons');
+                if (this.vendors.length) deferredChunks.push('vendors');
                 source = mainRender({
-                    entryId: chunk.entryModule.moduleId,   // ./src/index.js
-                    modules: chunk.modules  // [{moduleId: './src/index.js'}, {moduleId: './src/title.js'}]
+                    entryId: chunk.entryModule.moduleId,
+                    modules: chunk.modules,
+                    deferredChunks
                 });
+
             }
             chunk.files.push(file);
             this.emitAsset(file, source);
@@ -196,6 +217,37 @@ class Compilation extends Tapable {
     seal(callback) {
         this.hooks.seal.call();
         this.hooks.beforeChunks.call();//生成代码块之前
+
+
+        for (const module of this.modules) {//循环入口模块
+            // 若是三方模块
+            if (/node_modules/.test(module.moduleId)) {
+                module.name = 'vendors';
+                // if(!this.vendors.includes(module))
+                if(!this.vendors.find(item => item.moduleId === module.moduleId))
+                    this.vendors.push(module);
+            } else {
+                if (this.commonsCountMap[module.moduleId]) {
+                    this.commonsCountMap[module.moduleId].count++;
+                } else {
+                    this.commonsCountMap[module.moduleId] = { count: 1, module };
+                }
+            }
+        }
+        for (let moduleId in this.commonsCountMap) {
+            const moduleCount = this.commonsCountMap[moduleId];
+            let { module, count } = moduleCount;
+            if (count >= 2) {
+                module.name = 'commons';
+                this.commons.push(module);
+            }
+        }
+
+        // 三方的 和 公共模块
+        let excludeModuleIds = [...this.vendors, ...this.commons].map(item => item.moduleId);
+        this.modules = this.modules.filter(item => !excludeModuleIds.includes(item.moduleId));
+
+
         // 一般来说,默认情况下,每一个入口会生成一个代码块
         for (const entryModule of this.entries) {//循环入口模块
             const chunk = new Chunk(entryModule);//创建代码块  根据入口模块得到一个代码块
@@ -203,6 +255,22 @@ class Compilation extends Tapable {
             //把代码块的模块添加到代码块中 
             chunk.modules = this.modules.filter(module => module.name == chunk.name);
         }
+
+
+        if (this.vendors.length) {
+            const chunk = new Chunk(this.vendors[0]);
+            chunk.async = true;
+            this.chunks.push(chunk);
+            chunk.modules = this.vendors;
+        }
+        if (this.commons.length) {
+            const chunk = new Chunk(this.commons[0]);
+            chunk.async = true;
+            this.chunks.push(chunk);
+            chunk.modules = this.commons;
+        }
+
+
         this.hooks.afterChunks.call(this.chunks);
         //生成代码块之后 要生成代码块对应的资源
         this.createChunkAssets();
