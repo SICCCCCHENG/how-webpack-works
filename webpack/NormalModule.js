@@ -3,6 +3,9 @@ const types = require('babel-types');
 const generate = require('babel-generator').default;
 const traverse = require('babel-traverse').default;
 const async = require('neo-async');
+const fs = require('fs')
+const { runLoaders } = require('./loader-runner')
+
 class NormalModule {
     constructor({ name, context, rawRequest, resource, parser, moduleId, async }) {
         this.name = name;
@@ -27,9 +30,9 @@ class NormalModule {
     build(compilation, callback) {
         console.log('build @@@');
         this.doBuild(compilation, err => {
-            let originalSource = this.getSource(this.resource, compilation);
+            // let originalSource = this.getSource(this.resource, compilation);
             // 将 当前模块 的内容转换成 AST
-            const ast = this.parser.parse(originalSource);
+            const ast = this.parser.parse(this._source);
             // 遍历语法树,找到里面的依赖进行收集
             traverse(ast, {
                 // 如果当前节点是一个函数调用时, 进入回调
@@ -135,10 +138,30 @@ class NormalModule {
     }
     //获取模块代码
     doBuild(compilation, callback) {
-        let originalSource = this.getSource(this.resource, compilation);
+        // let originalSource = this.getSource(this.resource, compilation);
         // loader逻辑放到这
-        this._source = originalSource;
-        callback();
+        // 读出来的内容交给loader-runner进行转换
+        let { module: { rules } } = compilation.options
+        let loaders = []
+        for (let i = 0; i < rules.length; i++) {
+            let rule = rules[i]
+            if (rule.test.test(this.resource)) {
+                loaders.push(...rule.use)
+            }
+        }
+        const resolveLoader = (loader) => require.resolve(
+            path.posix.join(this.context, 'loaders', loader)
+        )
+        loaders = loaders.map(resolveLoader)
+
+        runLoaders({
+            resource: this.resource,
+            loaders
+        }, (err, { result, resourceBuffer }) => {
+            this._source = result.toString('UTF-8');
+            callback();
+        })
+
     }
     getSource(resource, compilation) {
         let originalSource = compilation.inputFileSystem.readFileSync(resource, 'utf8');

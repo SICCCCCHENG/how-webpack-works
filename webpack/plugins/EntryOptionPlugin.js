@@ -3,7 +3,7 @@ class EntryOptionPlugin {
     apply(compiler) {
         compiler.hooks.entryOption.tap("EntryOptionPlugin", (context, entry) => {
             if (typeof entry == 'string') {
-                new SingleEntryPlugin(context, entry, entryName).apply(compiler);
+                new SingleEntryPlugin(context, entry, 'main').apply(compiler);
             } else {
                 // 处理多入口
                 for (let entryName in entry) {

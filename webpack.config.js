@@ -4,14 +4,27 @@ module.exports = {
     mode: 'development',
     devtool: false,
     // entry: './src/index.js',
-    entry: {
-        entry1: './src/spilitChunks/entry1.js',
-        entry2: './src/spilitChunks/entry2.js',
-    },
+    // entry: {
+    //     entry1: './src/spilitChunks/entry1.js',
+    //     entry2: './src/spilitChunks/entry2.js',
+    // },
+    entry: './src/loader-supported/index.js',
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
         chunkFilename: '[name].js'
+    },
+    // 自定义查找loaders模块路径
+    resolveLoader: {
+        modules: ['loaders', 'node_modules']
+    },
+    module: {
+        rules: [
+            {
+                test: /\.less$/,
+                use: ['style-loader', 'less-loader']
+            }
+        ]
     },
     optimization: {
         // 设置代码块分割方案
